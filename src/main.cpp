@@ -1,39 +1,71 @@
-#define TOML_IMPLEMENTATION
-#define TOML_HEADER_ONLY 0
-#define TOML_EXCEPTIONS 0
+#define ARGS_NOEXCEPT
 
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
 
-#include "fmt/core.h"
-#include "fmt/format.h"
-#include "fmt/ostream.h"
-#include "fmt/ranges.h"
+#include "args/args.hxx"
 #include "seq/seq.hpp"
 #include "enums.hpp"
-#include "toml.hpp"
+#include "fmt-ext.hpp"
+#include "toml-ext.hpp"
 
 using Enums::Language;
-using TomlHelpers::getTomlProperty;
-
-auto formatSemanticVersion(int major, int minor, int patch) -> std::string
-{
-    return fmt::format("{:d}.{:d}.{:d}", major, minor, patch);
-}
-
-template<>
-struct fmt::formatter<toml::node_type> : fmt::ostream_formatter {};
+using TomlExt::getTomlProperty;
 
 constexpr const char* DEFAULT_COMPILER = "g++";
 
-int main()
+consteval auto deduceCppVersion() -> std::string_view
 {
-    const std::string tomllibVersion = formatSemanticVersion(TOML_LIB_MAJOR, TOML_LIB_MINOR, TOML_LIB_PATCH);
-    const std::string fmtlibVersion  = formatSemanticVersion(FMT_VERSION / 10000, (FMT_VERSION % 10000) / 100, FMT_VERSION % 100);
+    switch (__cplusplus)
+    {
+        case 202002l:
+            return "C++20";
+        case 202302l:
+            return "C++23";
+        case 202603l:
+            return "C++26";
+        default:
+            return "unknown";
+    }
+}
 
-    fmt::println("using toml++ version: {:s}", tomllibVersion);
-    fmt::println("using fmt version: {:s}", fmtlibVersion);
+int main(int argc, char *argv[])
+{
+    args::ArgumentParser parser{"Sane build solution for C/C++"};
+    args::Flag help{parser, "help", "prints this help message and exits", {'h', "help"}};
+    args::Flag verbose{parser, "verbose", "enables additional logging", {'v', "verbose"}};
+
+    if (not parser.ParseCLI(argc, argv))
+    {
+        fmt::println("Failed to parse CLI arguments ({:s})", parser.GetErrorMsg());
+        std::abort();
+    }
+
+    if (help)
+    {
+        fmt::println("{:s}", parser.Help());
+        std::abort();
+    }
+
+    if (verbose)
+    {
+        // CPP Version
+        // ---
+        static constexpr auto cppVersion = deduceCppVersion();
+
+        fmt::println("Application running on {:s} standard", cppVersion);
+
+        // Library Versions
+        // ---
+        const std::string tomlLibVersion = FmtExt::formatSemanticVersion(TOML_LIB_MAJOR, TOML_LIB_MINOR, TOML_LIB_PATCH);
+        const std::string fmtLibVersion  = FmtExt::formatSemanticVersion(FMT_VERSION / 10000, (FMT_VERSION % 10000) / 100, FMT_VERSION % 100);
+        const std::string argsLibVersion = FmtExt::formatSemanticVersion(ARGS_VERSION_MAJOR, ARGS_VERSION_MINOR, ARGS_VERSION_PATCH);
+
+        fmt::println("using toml++ version: {:s}", tomlLibVersion);
+        fmt::println("using fmt version: {:s}", fmtLibVersion);
+        fmt::println("using args version: {:s}", argsLibVersion);
+    }
 
     const toml::parse_result parsed = toml::parse_file("cbuild.toml");
 
@@ -41,22 +73,22 @@ int main()
     {
         const toml::table& content = parsed;
 
-        const auto languageStr = getTomlProperty<TomlLookupManner::MANDATORY, std::string>(content, "language");
+        const auto languageStr = getTomlProperty<std::string>(content, "language");
 
         const Language language =
             (languageStr == "c") ? Language::C :
             (languageStr == "cpp" || languageStr == "c++") ? Language::CPP :
             Language::UNKNOWN;
 
-        const auto primaryModuleName = getTomlProperty<TomlLookupManner::MANDATORY, std::string>(content, "primary");
-        const auto primaryModule     = getTomlProperty<TomlLookupManner::MANDATORY, toml::table>(content, primaryModuleName);
+        const auto primaryModuleName = getTomlProperty<std::string>(content, "primary");
+        const auto primaryModule     = getTomlProperty<toml::table>(content, primaryModuleName);
 
-        const auto compilerOpt = getTomlProperty<TomlLookupManner::OPTIONAL, std::string>(content, "compiler");
-        const auto compiler    = (compilerOpt.has_value()) ? compilerOpt.value() : DEFAULT_COMPILER;
+        const auto compilerOpt = getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(content, "compiler");
+        const auto compiler    = compilerOpt.has_value() ? compilerOpt.value() : DEFAULT_COMPILER;
 
-        const auto cflags  = getTomlProperty<TomlLookupManner::MANDATORY, toml::array>(primaryModule, "cflags");
-        const auto sources = getTomlProperty<TomlLookupManner::MANDATORY, toml::array>(primaryModule, "sources");
-        const auto output  = getTomlProperty<TomlLookupManner::MANDATORY, std::string>(primaryModule, "output");
+        const auto cflags  = getTomlProperty<toml::array>(primaryModule, "cflags");
+        const auto sources = getTomlProperty<toml::array>(primaryModule, "sources");
+        const auto output  = getTomlProperty<std::string>(primaryModule, "output");
 
         const auto cflagsFlattened  = fmt::format("{:s}", fmt::join(cflags | Seq::map([](const toml::node& node) { return node.value_exact<std::string>().value(); }) | Seq::toVector(), " "));
         const auto sourcesFlattened = fmt::format("{:s}", fmt::join(sources | Seq::map([](const toml::node& node) { return node.value_exact<std::string>().value(); }) | Seq::toVector(), " "));

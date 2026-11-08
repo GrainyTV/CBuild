@@ -1,48 +1,61 @@
 #pragma once
+#define TOML_IMPLEMENTATION
+#define TOML_HEADER_ONLY 0
+#define TOML_EXCEPTIONS 0
+
 #include <type_traits>
 
-#include "enums.hpp"
 #include "fmt/base.h"
 #include "seq/seq.hpp"
 #include "toml++/toml.hpp"
 
-using Enums::TomlLookupManner;
+enum class TomlLookupManner : std::uint8_t
+{
+    MANDATORY,
+    OPTIONAL,
+};
 
-namespace TomlHelpers
+namespace TomlExt
 {
     template<typename T>
-    constexpr auto tomlTypeNameOf() -> std::string_view
-    {
-        using Type = std::remove_cv_t<std::remove_reference_t<T>>;
+    constexpr bool IS_TOML_VALUE_TYPE =
+        std::is_same_v<T, std::string> ||
+        std::is_same_v<T, toml::date> ||
+        std::is_same_v<T, toml::time> ||
+        std::is_same_v<T, toml::date_time> ||
+        std::is_same_v<T, int64_t> ||
+        std::is_same_v<T, double> ||
+        std::is_same_v<T, bool>;
 
-        if constexpr (std::is_same_v<Type, std::string>)
-            return "string";
-        else if constexpr (std::is_same_v<Type, int64_t>)
-            return "integer";
-        else if constexpr (std::is_same_v<Type, double>)
-            return "floating-point";
-        else if constexpr (std::is_same_v<Type, bool>)
-            return "boolean";
-        else if constexpr (std::is_same_v<Type, toml::date>)
-            return "date";
-        else if constexpr (std::is_same_v<Type, toml::time>)
-            return "time";
-        else if constexpr (std::is_same_v<Type, toml::date_time>)
-            return "date-time";
-        else if constexpr (std::is_same_v<Type, toml::array>)
-            return "array";
-        else if constexpr (std::is_same_v<Type, toml::table>)
-            return "table";
-        else
-            return "unknown";
-    }
+    template<typename T>
+    concept TOML_TYPE =
+        IS_TOML_VALUE_TYPE<T> ||
+        std::is_same_v<T, toml::array> ||
+        std::is_same_v<T, toml::table>;
+
+    template<typename T, bool IsTomlValueType>
+    struct RequiredTypePrintable
+    {
+        const toml::node_type value = T{}.type();
+    };
+
+    template<typename T>
+    struct RequiredTypePrintable<T, true>
+    {
+        const toml::node_type value = toml::value<T>{}.type();
+    };
 
     template<typename T>
     auto checkWhetherPropertyIs(const toml::node_view<const toml::node>& node, std::string_view id) -> void
     {
         if (not node.is<T>())
         {
-            fmt::println("TOML property `{:s}` is expected to have type {:s}, but found {:s}", id, tomlTypeNameOf<T>(), node.type());
+            fmt::println(
+                "TOML property `{:s}` is expected to have type {:s}, but found {:s}",
+                id,
+                RequiredTypePrintable<T, IS_TOML_VALUE_TYPE<T>>{}.value,
+                node.type()
+            );
             std::abort();
         }
 
@@ -79,7 +92,7 @@ namespace TomlHelpers
         }
     }
 
-    template<TomlLookupManner Lookup, typename T>
+    template<TOML_TYPE T, TomlLookupManner Lookup = TomlLookupManner::MANDATORY>
     auto getTomlProperty(const toml::table& table, std::string_view id) -> std::conditional_t<Lookup == TomlLookupManner::MANDATORY, T, std::optional<T>>
     {
         const toml::node_view<const toml::node> node = table[id];

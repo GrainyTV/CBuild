@@ -17,10 +17,4 @@ namespace Enums
         STATIC_LIB,
         CUSTOM,
     };
-
-    enum class TomlLookupManner : std::uint8_t
-    {
-        MANDATORY,
-        OPTIONAL,
-    };
 }
