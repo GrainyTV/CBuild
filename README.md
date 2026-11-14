@@ -8,7 +8,9 @@ CBuild is a drop-in single file static executable to build C/C++ projects using 
 
 ## How to Build
 
-Because CBuild is a static executable, you need a musl compiler toolchain. You either have it packaged in your distro's repository or you can use [musl-cross-make](https://github.com/richfelker/musl-cross-make) to build it from source. You also need to use C++20 standard or newer. GCC version 11 or newer has good enough support for C++20 for the most part.
+Because CBuild is a static executable, you need a musl compiler toolchain. You either have it packaged in your distro's repository or you can use [musl-cross-make](https://github.com/richfelker/musl-cross-make) to build it from source.
+
+You need to use C++20 standard or newer. GCC version 11 or newer has good enough support for the most part.
 
 **Project Dependencies**
 
@@ -18,7 +20,9 @@ Because CBuild is a static executable, you need a musl compiler toolchain. You e
 
 - fmt
 
-- Seq.hpp
+- seq.hpp
+
+- args
 
 ## Context
 

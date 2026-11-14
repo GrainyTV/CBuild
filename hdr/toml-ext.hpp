@@ -1,7 +1,8 @@
 #pragma once
-#define TOML_IMPLEMENTATION
 #define TOML_HEADER_ONLY 0
 #define TOML_EXCEPTIONS 0
+#define TOML_ENABLE_CHRONO 0
+#define TOML_ENABLE_FORMATTERS 0
 
 #include <type_traits>
 
@@ -119,4 +120,6 @@ namespace TomlExt
             return std::optional{getTomlPropertyAs<T>(node)};
         }
     }
+
+    auto flattenStringArray(const toml::array& strings) -> std::string;
 }
