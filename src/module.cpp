@@ -10,25 +10,92 @@
 #include "seq/seq.hpp"
 #include "terminate.hpp"
 
+using Terminate::TerminateConditionWhen;
 using TomlExt::getTomlProperty;
 namespace fs = std::filesystem;
 
-static auto parseSourceFiles(const toml::array& sourceNodes) -> std::vector<std::string>
+static auto flattenStringEnumerable(IEnumerable<std::string> entries) -> std::string
 {
-    const auto sourceFiles =
+    return
+        entries
+        | Seq::reduce(std::string{}, [](const auto& elem, std::string& accum) {
+                if (accum.empty())
+                {
+                    return accum + elem;
+                }
+                else
+                {
+                    return accum + ' ' + elem;
+                }
+            });
+}
+
+static auto parseSourceFiles(const toml::array& sourceNodes, const BuildContext& context) -> std::vector<fs::path>
+{
+    auto convertNodeToSourceFile = [&context](const toml::node& node)
+    {
+        const fs::path srcUser{*node.value_exact<std::string>()};
+
+        if (srcUser.is_absolute() && fs::is_regular_file(srcUser))
+        {
+            Terminate::withMessage(
+                fmt::format(
+                    R"(Source file {:s} is provided using an absolute path, which is generally not recommended)" "\n"
+                    R"(Either make it relative to the project directory, or add "enable-abspath = true" to your project file)",
+                    srcUser
+                ),
+                TerminateConditionWhen::AT_CONFIGURE
+            );
+        }
+
+        const fs::path src = context.sourceDir / srcUser;
+
+        if (not fs::exists(src) || not fs::is_regular_file(src))
+        {
+            Terminate::missingFile(src.string());
+        }
+
+        return src;
+    };
+
+    return
         sourceNodes
-        | Seq::map([](const toml::node& node) { return *node.value_exact<std::string>(); })
+        | Seq::map(convertNodeToSourceFile)
         | Seq::toVector();
+}
 
-    sourceFiles
-    | Seq::iter([](const auto& src) {
-            if (not fs::exists(src))
-            {
-                Terminate::missingFile(src);
-            }
-        });
+static auto parseHeaderDirs(const toml::array& headerNodes, const BuildContext& context) -> std::vector<fs::path>
+{
+    auto convertNodeToHeaderDir = [&context](const toml::node& node)
+    {
+        const fs::path hdrUser{*node.value_exact<std::string>()};
 
-    return sourceFiles;
+        if (hdrUser.is_absolute() && fs::is_directory(hdrUser))
+        {
+            Terminate::withMessage(
+                fmt::format(
+                    R"(Header directory {:s} is provided using an absolute path, which is generally not recommended)" "\n"
+                    R"(Either make it relative to the project directory, or add "enable-abspath = true" to your project file)",
+                    hdrUser
+                ),
+                TerminateConditionWhen::AT_CONFIGURE
+            );
+        }
+
+        const fs::path hdr = context.sourceDir / hdrUser;
+
+        if (not fs::exists(hdr) || not fs::is_directory(hdr))
+        {
+            Terminate::missingFile(hdr.string());
+        }
+
+        return hdr;
+    };
+
+    return
+        headerNodes
+        | Seq::map(convertNodeToHeaderDir)
+        | Seq::toVector();
 }
 
 static auto parseModuleType(std::string_view type) -> ModuleType
@@ -49,11 +116,12 @@ static auto parseModuleType(std::string_view type) -> ModuleType
     Terminate::invalidModuleType(type);
 }
 
-BuildModule::BuildModule(const toml::table& module, const BuildContext& context)
+BuildModule::BuildModule(const std::string& moduleName, const toml::table& module, const BuildContext& context)
     : context(context)
-    , sources(parseSourceFiles(getTomlProperty<toml::array>(module, "sources")))
+    , sources(parseSourceFiles(getTomlProperty<toml::array>(module, "sources"), context))
+    , headers(parseHeaderDirs(getTomlProperty<toml::array, TomlLookupManner::OPTIONAL>(module, "headers").value_or(toml::array{}), context))
     , cflags(getTomlProperty<toml::array>(module, "cflags"))
-    , output(getTomlProperty<std::string>(module, "output"))
+    , output(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(module, "output").value_or(moduleName))
     , type(parseModuleType(getTomlProperty<std::string>(module, "type")))
 {
 }
@@ -65,35 +133,28 @@ auto BuildModule::build() const -> void
 
     const std::string cflagsFlattened = TomlExt::flattenStringArray(cflags);
 
-    for (const auto& src : sources)
+    const std::string headerDirs =
+        flattenStringEnumerable(headers | Seq::map([](const fs::path& hdr) { return "-I" + hdr.string(); }));
+
+    for (const fs::path& src : sources)
     {
-        const fs::path srcFullpath = context.sourceDir / src;
-        const fs::path objFullpath = context.buildDir / "obj" / (src + ".o"); // TODO: use the platform complaint object file extension
+        fs::path srcRelative = fs::relative(src, context.sourceDir);
+        const fs::path obj   = context.buildDir / "obj" / srcRelative.concat(".o"); // TODO: use the platform complaint object file extension
 
-        fs::create_directories(objFullpath.parent_path());
+        fs::create_directories(obj.parent_path());
 
-        Process::Result cmd = Process::run(context.compiler, cflagsFlattened, "-c", "-o", objFullpath, srcFullpath);
+        Process::Result cmd = Process::run(context.compiler, headerDirs, cflagsFlattened, "-c", "-o", obj, src);
 
         if (cmd.exitcode != 0)
         {
             Terminate::failedProcess(cmd);
         }
 
-        objectFiles.emplace_back(objFullpath);
+        objectFiles.emplace_back(obj);
     }
 
     const std::string objectFilesFlattened =
-        objectFiles
-        | Seq::reduce(std::string{}, [](const fs::path& obj, std::string& accum) {
-                if (accum.empty())
-                {
-                    return accum + obj.string();
-                }
-                else
-                {
-                    return accum + ' ' + obj.string();
-                }
-            });
+        flattenStringEnumerable(objectFiles | Seq::map([](const fs::path& obj) { return obj.string(); }));
 
     // TODO: check whether we actually need linking with stdc++
     // TODO: collect object files for linking step and flatten them to single param

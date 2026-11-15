@@ -3,7 +3,8 @@
 #include <iostream>
 #include <type_traits>
 #include <utility>
-#include <vector>
+
+#include "stringutils.hpp"
 
 #ifdef __unix__
 #include <unistd.h>
@@ -85,16 +86,6 @@ namespace Process
             closeEnd(writeEnd());
         }
     };
-
-    inline auto rstrip(std::string& str) -> std::string
-    {
-        if (not str.empty() && str.ends_with('\n'))
-        {
-            return str.erase(str.size() - 1);
-        }
-
-        return str;
-    }
 
     template<typename T>
     concept CONVERTIBLE_TO_C_STRING =
@@ -187,8 +178,8 @@ namespace Process
         const bool exited = WIFEXITED(status);
 
         return {
-            .output   = rstrip(out),
-            .error    = rstrip(err),
+            .output   = String::rstrip(std::move(out)),
+            .error    = String::rstrip(std::move(err)),
             .exitcode = exited ? WEXITSTATUS(status) : 1,
         };
     }

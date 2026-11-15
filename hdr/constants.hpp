@@ -3,7 +3,6 @@
 
 #include "args/args.hxx"
 #include "fmt-ext.hpp"
-#include "fmt/compile.h"
 
 namespace CompileTime
 {

@@ -15,13 +15,14 @@ class BuildModule
 {
 private:
     BuildContext context;
-    std::vector<std::string> sources;
+    std::vector<std::filesystem::path> sources;
+    std::vector<std::filesystem::path> headers;
     toml::array cflags;
     std::string output;
     ModuleType type;
 
 public:
-    BuildModule(const toml::table& module, const BuildContext& context);
+    BuildModule(const std::string& moduleName, const toml::table& module, const BuildContext& context);
 
     auto build() const -> void;
 

@@ -1,7 +1,11 @@
 #pragma once
+#define FMT_HEADER_ONLY
+
 #include <filesystem>
 
 #include "fmt/base.h"
+#include "fmt/color.h"
+#include "fmt/compile.h"
 #include "fmt/ostream.h"
 #include "fmt/ranges.h"
 

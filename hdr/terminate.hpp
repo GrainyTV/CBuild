@@ -6,28 +6,43 @@
 
 namespace Terminate
 {
+    enum class TerminateConditionWhen : std::uint8_t
+    {
+        AT_CONFIGURE,
+        AT_BUILD,
+    };
+
     namespace _internal
     {
         [[noreturn]]
-        inline auto exitFailure(std::string_view message)
+        inline auto exitFailure(std::string_view message, TerminateConditionWhen when = TerminateConditionWhen::AT_CONFIGURE)
         {
-            FmtExt::println("[FAILURE]");
+            switch (when)
+            {
+                case TerminateConditionWhen::AT_CONFIGURE:
+                    fmt::println(fmt::emphasis::bold, "[CONFIG-FAILURE]");
+                    break;
+                case TerminateConditionWhen::AT_BUILD:
+                    fmt::println(fmt::emphasis::bold, "[BUILD-FAILURE]");
+                    break;
+            }
+
             FmtExt::println(message);
             std::exit(1);
-        }
-
-        [[noreturn]]
-        inline auto exit(std::string_view message)
-        {
-            FmtExt::println(message);
-            std::exit(0);
         }
     }
 
     [[noreturn]]
     inline auto usage(std::string_view help)
     {
-        _internal::exit(help);
+        fmt::print("{:s}", help);
+        std::exit(0);
+    }
+
+    [[noreturn]]
+    inline auto failedArgs(std::string_view info)
+    {
+        _internal::exitFailure(fmt::format("Failed to parse command line arguments\n{:s}", info), TerminateConditionWhen::AT_CONFIGURE);
     }
 
     [[noreturn]]
@@ -52,5 +67,11 @@ namespace Terminate
     inline auto failedProcess(const Process::Result& process)
     {
         _internal::exitFailure(fmt::format("{:s}", process.error));
+    }
+
+    [[noreturn]]
+    inline auto withMessage(std::string_view message, TerminateConditionWhen when)
+    {
+        _internal::exitFailure(message, when);
     }
 }

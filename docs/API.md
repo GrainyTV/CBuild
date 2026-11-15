@@ -14,9 +14,10 @@ This document keeps a list of all available options you can specify in your cbui
 
 ## Per-module Options
 
-| Option  | Type  | Possible Values                   | Mandatory | Description                         |
-|:-------:|:-----:|:---------------------------------:|:---------:|:-----------------------------------:|
-| type    | str   | executable, dynamiclib, staticlib | x         | what kind of module                 |
-| sources | array | any                               | x         | list of source files to compile     |
-| cflags  | array | any                               |           | list of compiler flags to use       |
-| output  | str   | any                               |           | custom output name over module name |
+| Option  | Type  | Possible Values                   | Mandatory | Description                          |
+|:-------:|:-----:|:---------------------------------:|:---------:|:------------------------------------:|
+| type    | str   | executable, dynamiclib, staticlib | x         | what kind of module                  |
+| sources | array | any                               | x         | list of source files to compile      |
+| cflags  | array | any                               |           | list of compiler flags to use        |
+| output  | str   | any                               |           | custom output name over module name  |
+| headers | array | any                               |           | additional header directories to use |

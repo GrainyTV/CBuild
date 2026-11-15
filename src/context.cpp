@@ -51,15 +51,15 @@ static auto parseLanguage(std::string_view language) -> Language
     Terminate::unknownLanguage(language);
 }
 
-auto buildContextFrom(const toml::table& globalScope) -> BuildContext
+auto buildContextFrom(const toml::table& globalScope, const std::filesystem::path& sourceDir) -> BuildContext
 {
     return {
         .compiler = parseCompiler(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(globalScope, "compiler")),
         .linker   = parseLinker(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(globalScope, "linker")),
         .archiver = parseArchiver(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(globalScope, "archiver")),
 
-        .sourceDir = fs::current_path(),
-        .buildDir  = fs::current_path() / "out",
+        .sourceDir = sourceDir,
+        .buildDir  = sourceDir / "out",
 
         .language = parseLanguage(getTomlProperty<std::string>(globalScope, "language")),
     };

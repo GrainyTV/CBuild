@@ -22,4 +22,4 @@ struct BuildContext
     Language language;
 };
 
-auto buildContextFrom(const toml::table& globalScope) -> BuildContext;
+auto buildContextFrom(const toml::table& globalScope, const std::filesystem::path& sourceDir) -> BuildContext;
