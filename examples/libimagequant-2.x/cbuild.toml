@@ -1,0 +1,16 @@
+language = "c"
+primary  = "libimagequant"
+
+[libimagequant]
+type    = "static-lib"
+output  = "libimagequant.a"
+sources = [
+    "pam.c",
+    "mediancut.c",
+    "blur.c",
+    "remap.c",
+    "mempool.c",
+    "kmeans.c",
+    "nearest.c",
+    "libimagequant.c",
+]
