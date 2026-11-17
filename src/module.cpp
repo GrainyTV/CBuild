@@ -196,7 +196,7 @@ BuildModule::BuildModule(const std::string& moduleName, const toml::table& modul
     , sources(parseSourceFiles(getTomlProperty<toml::array>(module, "sources"), context))
     , headers(parseHeaderDirs(getTomlProperty<toml::array, TomlLookupManner::OPTIONAL>(module, "headers").value_or(toml::array{}), context))
     , objectFiles(populateObjectFiles(sources, context))
-    , cflags(getTomlProperty<toml::array>(module, "cflags"))
+    , cflags(getTomlProperty<toml::array, TomlLookupManner::OPTIONAL>(module, "cflags").value_or(toml::array{}))
     , output(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(module, "output").value_or(moduleName))
     , type(parseModuleType(getTomlProperty<std::string>(module, "type")))
 {
