@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
         if (not fs::is_directory(rootFlag))
         {
             Terminate::withMessage(
-                fmt::format("Your provided --root flag value \"{:s}\" does not point to an existing directory", rootFlag),
+                fmt::format(R"(Your provided --root flag value "{:s}" does not point to an existing directory)", rootFlag),
                 TerminateConditionWhen::AT_CONFIGURE
             );
         }
@@ -83,6 +83,7 @@ int main(int argc, char *argv[])
         const BuildModule module{primaryModuleName, primaryModule, context};
         module.generateCompileCommandsJson();
         module.build();
+        module.link();
     }
     else
     {
@@ -90,7 +91,10 @@ int main(int argc, char *argv[])
         const toml::source_position at = error.source().begin;
 
         Terminate::withMessage(
-            fmt::format("TOML syntax error encountered at (line {:d}, column {:d})\n{:s}", at.line, at.column, error.description()),
+            fmt::format(
+                "TOML syntax error encountered at (line {:d}, column {:d}))"
+                "{:s}", at.line, at.column, error.description()
+            ),
             TerminateConditionWhen::AT_CONFIGURE
         );
     }

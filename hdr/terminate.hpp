@@ -74,4 +74,16 @@ namespace Terminate
     {
         _internal::exitFailure(message, when);
     }
+
+    [[noreturn]]
+    inline auto posixError(std::string_view fn)
+    {
+        _internal::exitFailure(
+            fmt::format(
+                R"(POSIX system function "{:s}" failed with errno {:d})" "\n"
+                R"(Indicated error is "{:s}")",
+                fn, errno, strerror(errno)
+            )
+        );
+    }
 }

@@ -5,6 +5,6 @@ linker   = "x86_64-linux-musl-ld"
 
 [cbuild]
 type    = "executable"
-sources = ["src/main.cpp", "src/toml-ext.cpp", "src/module.cpp", "src/context.cpp"]
+sources = ["src/main.cpp", "src/toml-ext.cpp", "src/module.cpp", "src/context.cpp", "src/process.cpp"]
 cflags  = ["-ggdb", "-static", "-std=c++20", "-Wall", "-Wextra"]
 headers = ["hdr"]

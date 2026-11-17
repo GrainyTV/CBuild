@@ -1,10 +1,8 @@
 #pragma once
+#include <cstdint>
 #include <string>
-#include <iostream>
 #include <type_traits>
 #include <utility>
-
-#include "stringutils.hpp"
 
 #ifdef __unix__
 #include <unistd.h>
@@ -13,12 +11,19 @@
 
 namespace Process
 {
+    using Input = std::string;
+
     struct Result
     {
         std::string output;
         std::string error;
-
         int exitcode;
+    };
+
+    enum class PipeSide : std::uint8_t
+    {
+        WRITE_END,
+        READ_END,
     };
 
     class Pipe
@@ -26,65 +31,16 @@ namespace Process
     private:
         int fd[2] = {0, 0};
 
-        auto closeEnd(int end) -> void
-        {
-            if (close(end) != 0)
-            {
-                std::cout << "close failed\n";
-            }
-        }
-
-        auto duplicateTo(int end, int fd, bool closeAfterDuplicate) -> void
-        {
-            if (dup2(end, fd) < 0)
-            {
-                std::cout << "dup2 failed\n";
-            }
-
-            if (closeAfterDuplicate)
-            {
-                closeEnd(end);
-            }
-        }
-
     public:
-        Pipe()
-        {
-            if (pipe(fd) != 0)
-            {
-                std::cout << "pipe failed\n";
-            }
-        }
+        Pipe();
 
-        auto readEnd() -> int
-        {
-            return fd[0];
-        }
+        auto getEnd(PipeSide side) const -> int;
 
-        auto writeEnd() -> int
-        {
-            return fd[1];
-        }
+        auto closeEnd(PipeSide side) const -> void;
 
-        auto duplicateReadEndTo(int fd, bool closeAfterDuplicate = false) -> void
-        {
-            duplicateTo(readEnd(), fd, closeAfterDuplicate);
-        }
+        auto duplicateEndTo(PipeSide side, int fd, bool closeAfterDuplicate = false) const -> void;
 
-        auto duplicateWriteEndTo(int fd, bool closeAfterDuplicate = false) -> void
-        {
-            duplicateTo(writeEnd(), fd, closeAfterDuplicate);
-        }
-
-        auto closeReadEnd() -> void
-        {
-            closeEnd(readEnd());
-        }
-
-        auto closeWriteEnd() -> void
-        {
-            closeEnd(writeEnd());
-        }
+        auto readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> std::size_t;
     };
 
     template<typename T>
@@ -106,81 +62,13 @@ namespace Process
     }
 
     template<CONVERTIBLE_TO_C_STRING Executable, CONVERTIBLE_TO_C_STRING... Args>
-    auto run(Executable&& executable, Args&& ...args) -> Process::Result
+    auto create(Executable&& executable, Args&& ...args) -> Process::Input
     {
-        Pipe opipe;
-        Pipe epipe;
+        Process::Input input{deduceCString(std::forward<Executable>(executable))};
+        ((input += ' ' + std::string{deduceCString(std::forward<Args>(args))}), ...);
 
-        int childPid = fork();
-
-        if (childPid < 0)
-        {
-            std::cout << "fork failed\n";
-        }
-
-        if (childPid == 0)
-        {
-            // Forked Child Process Branch
-            // ---
-            opipe.closeReadEnd();
-            epipe.closeReadEnd();
-
-            opipe.duplicateWriteEndTo(STDOUT_FILENO, true);
-            epipe.duplicateWriteEndTo(STDERR_FILENO, true);
-
-            std::string cmd{deduceCString(executable)};
-            ((cmd += " " + std::string{deduceCString(std::forward<Args>(args))}), ...);
-
-            execlp("sh", "sh", "-c", cmd.c_str(), nullptr);
-        }
-
-        // Original Parent Process Branch
-        // ---
-        opipe.closeWriteEnd();
-        epipe.closeWriteEnd();
-
-        std::string out;
-        std::string err;
-
-        char buf[4096];
-        int status;
-
-        while (true)
-        {
-            size_t oamount = read(opipe.readEnd(), buf, sizeof(buf));
-
-            if (oamount > 0)
-            {
-                out.append(buf, oamount);
-            }
-
-            size_t eamount = read(epipe.readEnd(), buf, sizeof(buf));
-
-            if (eamount > 0)
-            {
-                err.append(buf, eamount);
-            }
-
-            if (oamount + eamount == 0)
-            {
-                break;
-            }
-        }
-
-        opipe.closeReadEnd();
-        epipe.closeReadEnd();
-
-        if (waitpid(childPid, &status, 0) < 0)
-        {
-            std::cout << "waitpid failed\n";
-        }
-
-        const bool exited = WIFEXITED(status);
-
-        return {
-            .output   = String::rstrip(std::move(out)),
-            .error    = String::rstrip(std::move(err)),
-            .exitcode = exited ? WEXITSTATUS(status) : 1,
-        };
+        return input;
     }
+
+    auto run(const Process::Input& input) -> Process::Result;
 }
