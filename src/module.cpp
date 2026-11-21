@@ -9,6 +9,9 @@
 #include "process.hpp"
 #include "seq/seq.hpp"
 #include "terminate.hpp"
+#include "stringutils.hpp"
+
+#undef OPTIONAL
 
 using Terminate::TerminateConditionWhen;
 using TomlExt::getTomlProperty;
@@ -57,6 +60,11 @@ static auto parseSourceFiles(const toml::array& sourceNodes, const BuildContext&
 
         return src;
     };
+
+    if (sourceNodes.empty())
+    {
+        Terminate::withMessage("Empty sources array encountered", TerminateConditionWhen::AT_CONFIGURE);
+    }
 
     return
         sourceNodes
@@ -156,32 +164,68 @@ auto BuildModule::linkStaticExecutable() const -> void
     const std::string objectFilesFlattened =
         flattenStringEnumerable(objectFiles | Seq::map([](const fs::path& obj) { return obj.string(); }));
 
-    Process::Result cmdCrt1 = Process::run(Process::create(context.compiler, "--print-file-name", "crt1.o"));
-    Process::Result cmdCrti = Process::run(Process::create(context.compiler, "--print-file-name", "crti.o"));
-    Process::Result cmdCrtn = Process::run(Process::create(context.compiler, "--print-file-name", "crtn.o"));
-    Process::Result cmdCrtb = Process::run(Process::create(context.compiler, "--print-file-name", "crtbeginT.o"));
-    Process::Result cmdCrte = Process::run(Process::create(context.compiler, "--print-file-name", "crtend.o"));
+    Process::Input link;
 
-    fs::path baseLibDir = fs::path{cmdCrt1.output}.parent_path();
-    fs::path gccLibDir  = fs::path{cmdCrtb.output}.parent_path();
+    if (String::contains(context.compiler, "mingw"))
+    {
+        Process::Result cmdCrt2 = Process::run(Process::create(context.compiler, "--print-file-name", "crt2.o"));
+        Process::Result cmdCrtb = Process::run(Process::create(context.compiler, "--print-file-name", "crtbegin.o"));
+        Process::Result cmdCrte = Process::run(Process::create(context.compiler, "--print-file-name", "crtend.o"));
 
-    Process::Input link = Process::create(
-        context.linker,
-        "-static",
-        "-o", context.buildDir / output,
-        "-L", baseLibDir,
-        "-L", gccLibDir,
-        objectFilesFlattened,
-        cmdCrt1.output,
-        cmdCrti.output,
-        cmdCrtn.output,
-        cmdCrtb.output,
-        cmdCrte.output,
-        "-lstdc++",
-        "--start-group", "-lc", "-lgcc", "-lgcc_eh", "--end-group"
-    );
+        fs::path baseLibDir = fs::path{cmdCrt2.output}.parent_path();
+        fs::path gccLibDir  = fs::path{cmdCrtb.output}.parent_path();
 
-    fmt::println("{:s}", link);
+        link = Process::create(
+            context.linker,
+            "-static",
+            "-o", context.buildDir / output,
+            "-L", baseLibDir,
+            "-L", gccLibDir,
+            objectFilesFlattened,
+            cmdCrt2.output,
+            cmdCrtb.output,
+            cmdCrte.output,
+            "-lstdc++",
+            "--start-group", "-lgcc", "-lgcc_eh", "--end-group",
+            "-lmingw32",
+            "-lpthread",
+            "-lmingwex",
+            "-lmsvcrt",
+            "-lkernel32",
+            "-ladvapi32",
+            "-lshell32",
+            "-luser32"
+        );
+    }
+    else
+    {
+        Process::Result cmdCrt1 = Process::run(Process::create(context.compiler, "--print-file-name", "crt1.o"));
+        Process::Result cmdCrti = Process::run(Process::create(context.compiler, "--print-file-name", "crti.o"));
+        Process::Result cmdCrtn = Process::run(Process::create(context.compiler, "--print-file-name", "crtn.o"));
+        Process::Result cmdCrtb = Process::run(Process::create(context.compiler, "--print-file-name", "crtbeginT.o"));
+        Process::Result cmdCrte = Process::run(Process::create(context.compiler, "--print-file-name", "crtend.o"));
+
+        fs::path baseLibDir = fs::path{cmdCrt1.output}.parent_path();
+        fs::path gccLibDir  = fs::path{cmdCrtb.output}.parent_path();
+
+        link = Process::create(
+            context.linker,
+            "-static",
+            "-o", context.buildDir / output,
+            "-L", baseLibDir,
+            "-L", gccLibDir,
+            objectFilesFlattened,
+            cmdCrt1.output,
+            cmdCrti.output,
+            cmdCrtn.output,
+            cmdCrtb.output,
+            cmdCrte.output,
+            "-lstdc++",
+            "--start-group", "-lc", "-lgcc", "-lgcc_eh", "--end-group"
+        );
+    }
+
+    // fmt::println("{:s}", link);
 
     Process::Result cmd = Process::run(link);
 
@@ -218,7 +262,7 @@ auto BuildModule::build() const -> void
         const auto& src = sources[i];
         const auto& obj = objectFiles[i];
 
-        Process::Input compile = Process::create(context.compiler, headerDirs, cflagsFlattened, "-c", "-o", obj, src);
+        Process::Input compile = Process::create(context.compiler, headerDirs, cflagsFlattened, "-fdiagnostics-color=always", "-c", "-o", obj, src);
         fmt::println("[{:d}/{:d}] {:s}", finished, total, compile);
 
         Process::Result cmd    = Process::run(compile);
@@ -297,7 +341,7 @@ auto BuildModule::generateCompileCommandsJson(std::size_t indent) const -> void
                 }
 
                 arguments.push_back("-c");
-                arguments.push_back(srcRelative);
+                arguments.push_back(srcRelative.string());
 
                 if (i != 0)
                 {
@@ -308,7 +352,7 @@ auto BuildModule::generateCompileCommandsJson(std::size_t indent) const -> void
                 // ---
                 fmt::print(fileHandle, "{:s}", indentTxt);
                 fmt::print(fileHandle, "{{ ");
-                fmt::println(fileHandle, "\"directory\": \"{:s}\",", context.buildDir.c_str());
+                fmt::println(fileHandle, "\"directory\": \"{:s}\",", context.buildDir.string());
 
                 // LINE #2
                 // ---
@@ -320,7 +364,7 @@ auto BuildModule::generateCompileCommandsJson(std::size_t indent) const -> void
                 // ---
                 fmt::print(fileHandle, "{:s}", indentTxt);
                 fmt::print(fileHandle, "{:s}", indentTxt);
-                fmt::print(fileHandle, "\"file\": \"{:s}\"", srcRelative.c_str());
+                fmt::print(fileHandle, "\"file\": \"{:s}\"", srcRelative.string());
                 fmt::print(fileHandle, " }}");
             });
 

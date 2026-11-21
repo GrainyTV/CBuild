@@ -10,6 +10,8 @@
 #include "seq/seq.hpp"
 #include "toml++/toml.hpp"
 
+#undef OPTIONAL
+
 enum class TomlLookupManner : std::uint8_t
 {
     MANDATORY,

@@ -2,7 +2,13 @@
 #include <cstdlib>
 #include <string_view>
 #include "fmt-ext.hpp"
-#include "process.hpp"
+#include "stringutils.hpp"
+#include "platform.hpp"
+
+#if PLATFORM_WINDOWS
+    #include <windows.h>
+
+#endif
 
 namespace Terminate
 {
@@ -84,6 +90,47 @@ namespace Terminate
                 R"(Indicated error is "{:s}")",
                 fn, errno, strerror(errno)
             )
+        );
+    }
+
+    [[noreturn]]
+    inline auto winapiError(std::string_view fn)
+    {
+        int error = GetLastError();
+
+        int dwFlags  = FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER;
+        char* output = nullptr;
+
+        int formatted = FormatMessage(
+            dwFlags,
+            nullptr,
+            error,
+            LANG_SYSTEM_DEFAULT,
+            reinterpret_cast<char*>(&output), 255,
+            nullptr
+        );
+
+        if (formatted == 0)
+        {
+            Terminate::withMessage(
+                fmt::format(
+                    "Failed to deduce associated message of error code {:d} in Windows handler\n"
+                    "FormatMessage exited with code: {:d}", error, GetLastError()
+                ),
+                TerminateConditionWhen::AT_BUILD
+            );
+        }
+
+        std::string message = String::rstrip(output);
+        LocalFree(output);
+
+        _internal::exitFailure(
+            fmt::format(
+                R"(Windows system function "{:s}" failed with error code {:d})" "\n"
+                R"(Indicated error is "{:s}")",
+                fn, error, message
+            ),
+            TerminateConditionWhen::AT_BUILD
         );
     }
 }

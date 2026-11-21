@@ -7,9 +7,9 @@ namespace String
     {
         if (not str.empty())
         {
-            int i = str.length() - 1;
+            ssize_t i = str.length() - 1;
 
-            while (str[i] == '\n' && i >= 0)
+            while ((str[i] == '\n' || str[i] == '\r') && i >= 0)
             {
                 str.erase(i);
                 i -= 1;
@@ -19,5 +19,10 @@ namespace String
         }
 
         return str;
+    }
+
+    inline auto contains(const std::string& str, const std::string& what) -> bool
+    {
+        return str.find(what) != std::string::npos;
     }
 }

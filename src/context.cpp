@@ -2,10 +2,11 @@
 #include <optional>
 #include <string_view>
 #include "terminate.hpp"
-#include "tooling.hpp"
+#include "platform.hpp"
 
 using TomlExt::getTomlProperty;
-namespace fs = std::filesystem;
+
+#undef OPTIONAL
 
 static auto parseCompiler(const std::optional<std::string>& compilerOrNone) -> std::string
 {

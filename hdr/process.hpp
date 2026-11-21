@@ -3,11 +3,10 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
+#include <cwchar>
 
-#ifdef __unix__
-#include <unistd.h>
-#include <sys/wait.h>
-#endif
+#include "platform.hpp"
 
 namespace Process
 {
@@ -29,24 +28,31 @@ namespace Process
     class Pipe
     {
     private:
-        int fd[2] = {0, 0};
+    #if PLATFORM_WINDOWS
+        using FileDescriptorType = void*;
+    #else
+        using FileDescriptorType = int;
+    #endif
+
+        FileDescriptorType fd[2] = {0, 0};
 
     public:
         Pipe();
 
-        auto getEnd(PipeSide side) const -> int;
+        auto getEnd(PipeSide side) const -> FileDescriptorType;
 
         auto closeEnd(PipeSide side) const -> void;
 
         auto duplicateEndTo(PipeSide side, int fd, bool closeAfterDuplicate = false) const -> void;
 
-        auto readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> std::size_t;
+        auto readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> ssize_t;
     };
 
     template<typename T>
     concept CONVERTIBLE_TO_C_STRING =
         std::is_convertible_v<T, const char*> ||
-        std::is_same_v<decltype(std::declval<T>().c_str()), const char*>;
+        std::is_same_v<decltype(std::declval<T>().c_str()), const char*> ||
+        std::is_same_v<decltype(std::declval<T>().c_str()), const wchar_t*>;
 
     template<typename T>
     constexpr auto deduceCString(const T& str) -> const char*
@@ -54,6 +60,19 @@ namespace Process
         if constexpr (std::is_convertible_v<T, const char*>)
         {
             return str;
+        }
+        else if constexpr (std::is_same_v<decltype(str.c_str()), const wchar_t*>)
+        {
+            const wchar_t* input = str.c_str();
+
+            std::mbstate_t state     = std::mbstate_t();
+            const std::size_t length = 1 + std::wcsrtombs(nullptr, &input, 0, &state);
+
+            std::vector<char> mbstr(length);
+            std::wcsrtombs(&mbstr[0], &input, length, &state);
+
+            const char* data = mbstr.data();
+            return data;
         }
         else
         {

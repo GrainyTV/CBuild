@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
 
         Terminate::withMessage(
             fmt::format(
-                "TOML syntax error encountered at (line {:d}, column {:d}))"
+                "TOML syntax error encountered at (line {:d}, column {:d}))" "\n"
                 "{:s}", at.line, at.column, error.description()
             ),
             TerminateConditionWhen::AT_CONFIGURE
