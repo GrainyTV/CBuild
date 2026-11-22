@@ -1,5 +1,6 @@
 #pragma once
 #include <string_view>
+#include <cstdint>
 
 #if defined(_WIN32)
     #define PLATFORM_WINDOWS 1
@@ -21,32 +22,57 @@
 
 #endif
 
-namespace Tooling
+enum class Tooling : std::uint8_t
 {
-    constexpr auto platformSpecificDefaultCompiler() -> std::string_view
+    COMPILER,
+    LINKER,
+    ARCHIVER,
+};
+
+namespace Platform
+{
+    consteval auto defaultApp(Tooling tooling) -> std::string_view
     {
-    #if defined(__linux__)
-        return "gcc";
-    #elif defined(_WIN32)
-        return "cl.exe";
-    #endif
+        switch (tooling)
+        {
+            case Tooling::COMPILER:
+            #if PLATFORM_WINDOWS
+                return "cl.exe";
+            #elif PLATFORM_MACOS
+                return "clang";
+            #else
+                return "gcc";
+            #endif
+                break;
+
+            case Tooling::LINKER:
+            #if PLATFORM_WINDOWS
+                return "link.exe";
+            #elif PLATFORM_MACOS
+                return "ld64";
+            #else
+                return "ld";
+            #endif
+                break;
+
+            case Tooling::ARCHIVER:
+            #if PLATFORM_WINDOWS
+                return "lib.exe";
+            #elif PLATFORM_MACOS
+                return "llvm-ar";
+            #else
+                return "ar";
+            #endif
+                break;
+        }
     }
 
-    constexpr auto platformSpecificDefaultLinker() -> std::string_view
+    consteval auto objectFileExtension() -> std::string_view
     {
-    #if defined(__linux__)
-        return "ld";
-    #elif defined(_WIN32)
-        return "link.exe";
-    #endif
-    }
-
-    constexpr auto platformSpecificDefaultArchiver() -> std::string_view
-    {
-    #if defined(__linux__)
-        return "ar";
-    #elif defined(_WIN32)
-        return "cl.exe";
+    #if PLATFORM_WINDOWS
+        return ".obj";
+    #else
+        return ".o";
     #endif
     }
 }

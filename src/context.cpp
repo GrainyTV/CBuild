@@ -6,38 +6,6 @@
 
 using TomlExt::getTomlProperty;
 
-#undef OPTIONAL
-
-static auto parseCompiler(const std::optional<std::string>& compilerOrNone) -> std::string
-{
-    if (compilerOrNone.has_value())
-    {
-        return compilerOrNone.value();
-    }
-
-    return std::string{Tooling::platformSpecificDefaultCompiler()};
-}
-
-static auto parseLinker(const std::optional<std::string>& linkerOrNone) -> std::string
-{
-    if (linkerOrNone.has_value())
-    {
-        return linkerOrNone.value();
-    }
-
-    return std::string{Tooling::platformSpecificDefaultLinker()};
-}
-
-static auto parseArchiver(const std::optional<std::string>& archiverOrNone) -> std::string
-{
-    if (archiverOrNone.has_value())
-    {
-        return archiverOrNone.value();
-    }
-
-    return std::string{Tooling::platformSpecificDefaultArchiver()};
-}
-
 static auto parseLanguage(std::string_view language) -> Language
 {
     if (language == "c")
@@ -52,16 +20,28 @@ static auto parseLanguage(std::string_view language) -> Language
     Terminate::unknownLanguage(language);
 }
 
+static auto asString(std::string_view sv) -> std::string
+{
+    return {sv.data(), sv.size()};
+}
+
 auto buildContextFrom(const toml::table& globalScope, const std::filesystem::path& sourceDir) -> BuildContext
 {
     return {
-        .compiler = parseCompiler(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(globalScope, "compiler")),
-        .linker   = parseLinker(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(globalScope, "linker")),
-        .archiver = parseArchiver(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(globalScope, "archiver")),
+        .compiler =
+            getTomlProperty<std::string, TomlLookupManner::MAYBE_SPECIFIED>(globalScope, "compiler")
+                .value_or(asString(Platform::defaultApp(Tooling::COMPILER))),
+
+        .linker =
+            getTomlProperty<std::string, TomlLookupManner::MAYBE_SPECIFIED>(globalScope, "linker")
+                .value_or(asString(Platform::defaultApp(Tooling::LINKER))),
+
+        .archiver =
+            getTomlProperty<std::string, TomlLookupManner::MAYBE_SPECIFIED>(globalScope, "archiver")
+                .value_or(asString(Platform::defaultApp(Tooling::ARCHIVER))),
 
         .sourceDir = sourceDir,
         .buildDir  = sourceDir / "out",
-
-        .language = parseLanguage(getTomlProperty<std::string>(globalScope, "language")),
+        .language  = parseLanguage(getTomlProperty<std::string>(globalScope, "language")),
     };
 }

@@ -72,7 +72,15 @@ namespace Terminate
     [[noreturn]]
     inline auto failedProcess(const Process::Result& process)
     {
-        _internal::exitFailure(fmt::format("{:s}", process.error));
+        if (process.output.empty())
+        {
+            _internal::exitFailure(fmt::format("{:s}", process.error));
+        }
+
+        // This is a quick fix for MSVC compiler
+        // With cl.exe the header/copyright information goes to stderr, everything else to stdout
+        // ---
+        _internal::exitFailure(fmt::format("{:s}\n{:s}", process.error, process.output));
     }
 
     [[noreturn]]

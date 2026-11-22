@@ -45,7 +45,7 @@ namespace Process
 
         auto duplicateEndTo(PipeSide side, int fd, bool closeAfterDuplicate = false) const -> void;
 
-        auto readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> ssize_t;
+        auto readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> int64_t;
     };
 
     template<typename T>

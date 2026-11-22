@@ -11,10 +11,9 @@
 #include "terminate.hpp"
 #include "stringutils.hpp"
 
-#undef OPTIONAL
-
 using Terminate::TerminateConditionWhen;
 using TomlExt::getTomlProperty;
+
 namespace fs = std::filesystem;
 
 static auto flattenStringEnumerable(IEnumerable<std::string> entries) -> std::string
@@ -114,10 +113,7 @@ static auto populateObjectFiles(const std::vector<fs::path>& sources, const Buil
     for (const auto& src : sources)
     {
         fs::path srcRelative = fs::relative(src, context.sourceDir);
-
-        // TODO: use the platform complaint object file extension
-        // ---
-        objs.emplace_back(context.buildDir / "obj" / srcRelative.concat(".o"));
+        objs.emplace_back(context.buildDir / "obj" / srcRelative.concat(Platform::objectFileExtension()));
 
         fs::create_directories(objs.back().parent_path());
     }
@@ -162,11 +158,19 @@ auto BuildModule::linkStaticLibrary() const -> void
 auto BuildModule::linkStaticExecutable() const -> void
 {
     const std::string objectFilesFlattened =
-        flattenStringEnumerable(objectFiles | Seq::map([](const fs::path& obj) { return obj.string(); }));
+        flattenStringEnumerable(objectFiles | Seq::map([](const fs::path& obj) { return fmt::format("{:s}", obj); }));
 
     Process::Input link;
 
-    if (String::contains(context.compiler, "mingw"))
+    if (String::contains(context.compiler, "cl.exe"))
+    {
+        link = Process::create(
+            context.linker,
+            fmt::format("/OUT:{:s}", context.buildDir / output),
+            objectFilesFlattened
+        );
+    }
+    else if (String::contains(context.compiler, "mingw"))
     {
         Process::Result cmdCrt2 = Process::run(Process::create(context.compiler, "--print-file-name", "crt2.o"));
         Process::Result cmdCrtb = Process::run(Process::create(context.compiler, "--print-file-name", "crtbegin.o"));
@@ -238,10 +242,10 @@ auto BuildModule::linkStaticExecutable() const -> void
 BuildModule::BuildModule(const std::string& moduleName, const toml::table& module, const BuildContext& context)
     : context(context)
     , sources(parseSourceFiles(getTomlProperty<toml::array>(module, "sources"), context))
-    , headers(parseHeaderDirs(getTomlProperty<toml::array, TomlLookupManner::OPTIONAL>(module, "headers").value_or(toml::array{}), context))
+    , headers(parseHeaderDirs(getTomlProperty<toml::array, TomlLookupManner::MAYBE_SPECIFIED>(module, "headers").value_or(toml::array{}), context))
     , objectFiles(populateObjectFiles(sources, context))
-    , cflags(getTomlProperty<toml::array, TomlLookupManner::OPTIONAL>(module, "cflags").value_or(toml::array{}))
-    , output(getTomlProperty<std::string, TomlLookupManner::OPTIONAL>(module, "output").value_or(moduleName))
+    , cflags(getTomlProperty<toml::array, TomlLookupManner::MAYBE_SPECIFIED>(module, "cflags").value_or(toml::array{}))
+    , output(getTomlProperty<std::string, TomlLookupManner::MAYBE_SPECIFIED>(module, "output").value_or(moduleName))
     , type(parseModuleType(getTomlProperty<std::string>(module, "type")))
 {
     fs::create_directories(context.buildDir);
@@ -255,17 +259,36 @@ auto BuildModule::build() const -> void
     const std::string cflagsFlattened = TomlExt::flattenStringArray(cflags);
 
     const std::string headerDirs =
-        flattenStringEnumerable(headers | Seq::map([](const fs::path& hdr) { return "-I" + hdr.string(); }));
+        flattenStringEnumerable(headers | Seq::map([](const fs::path& hdr) { return "\"-I" + hdr.string() + "\""; }));
+
+    const std::string compileFlag =
+        context.compiler == "cl.exe"
+        ? "/c"
+        : "-c";
+
+    const std::string outputFlag =
+        context.compiler == "cl.exe"
+        ? "/Fo:"
+        : "-o";
 
     for (std::size_t i = 0; i < total; ++i)
     {
         const auto& src = sources[i];
         const auto& obj = objectFiles[i];
 
-        Process::Input compile = Process::create(context.compiler, headerDirs, cflagsFlattened, "-fdiagnostics-color=always", "-c", "-o", obj, src);
+        Process::Input compile = Process::create(
+            context.compiler,
+            headerDirs,
+            cflagsFlattened,
+            compileFlag,
+            outputFlag,
+            fmt::format("{:s}", obj),
+            fmt::format("{:s}", src)
+        );
+
         fmt::println("[{:d}/{:d}] {:s}", finished, total, compile);
 
-        Process::Result cmd    = Process::run(compile);
+        Process::Result cmd = Process::run(compile);
 
         if (cmd.exitcode != 0)
         {
@@ -278,7 +301,6 @@ auto BuildModule::build() const -> void
     // TODO: check whether we actually need linking with stdc++
     // TODO: collect object files for linking step and flatten them to single param
     // ---
-    // const fs::path outArtifact = context.buildDir / output;
 }
 
 auto BuildModule::link() const -> void
@@ -340,7 +362,7 @@ auto BuildModule::generateCompileCommandsJson(std::size_t indent) const -> void
                     arguments.push_back(flag);
                 }
 
-                arguments.push_back("-c");
+                arguments.push_back("/c");
                 arguments.push_back(srcRelative.string());
 
                 if (i != 0)
@@ -352,7 +374,7 @@ auto BuildModule::generateCompileCommandsJson(std::size_t indent) const -> void
                 // ---
                 fmt::print(fileHandle, "{:s}", indentTxt);
                 fmt::print(fileHandle, "{{ ");
-                fmt::println(fileHandle, "\"directory\": \"{:s}\",", context.buildDir.string());
+                fmt::println(fileHandle, "\"directory\": {:s},", context.buildDir);
 
                 // LINE #2
                 // ---
@@ -364,7 +386,7 @@ auto BuildModule::generateCompileCommandsJson(std::size_t indent) const -> void
                 // ---
                 fmt::print(fileHandle, "{:s}", indentTxt);
                 fmt::print(fileHandle, "{:s}", indentTxt);
-                fmt::print(fileHandle, "\"file\": \"{:s}\"", srcRelative.string());
+                fmt::print(fileHandle, "\"file\": {:s}", srcRelative);
                 fmt::print(fileHandle, " }}");
             });
 

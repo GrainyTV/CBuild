@@ -28,7 +28,7 @@ Process::Pipe::Pipe()
         Terminate::winapiError(nameof(CreatePipe));
     }
 
-    // Only allow write [R|No] <===> [W|Yes] end to be inherited
+    // Only allow write end to be inherited [R|No] <===> [W|Yes]
     // We don't want to read in child process
     // ---
     if (SetHandleInformation(fd[0], HANDLE_FLAG_INHERIT, false) == 0)
@@ -93,7 +93,7 @@ auto Process::Pipe::duplicateEndTo(PipeSide side, int fd, bool closeAfterDuplica
     }
 }
 
-auto Process::Pipe::readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> ssize_t
+auto Process::Pipe::readChunkOfData(std::string& to, char buffer[], std::size_t bufferSize) const -> int64_t
 {
 #if PLATFORM_WINDOWS
     return 1;
@@ -117,7 +117,8 @@ auto Process::Pipe::readChunkOfData(std::string& to, char buffer[], std::size_t 
 
 auto Process::run(const Process::Input& input) -> Process::Result
 {
-    Pipe opipe, epipe;
+    Pipe opipe;
+    Pipe epipe;
 
 #if PLATFORM_WINDOWS
     STARTUPINFO st;

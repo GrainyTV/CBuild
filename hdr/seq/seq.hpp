@@ -1,11 +1,14 @@
 #pragma once
+
+#if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wsubobject-linkage"
+#endif
 
 #include "lib/config.hpp"
 #include "lib/debug.hpp"
 #include "lib/seq_helper.hpp"
 #include "lib/seq_nocapture.hpp"
-#include "lib/type_inspect_utils.hpp"
+//#include "lib/type_inspect_utils.hpp"
 
 #include <optional>
 #include <string>
@@ -434,12 +437,12 @@ namespace Seq
     template<typename UserOverride = void>
     inline auto sum()
     {
-        using _internal::TypeInspect::EnsureIsSummable;
-        using _internal::TypeInspect::FallbackSumInitial;
+        //using Seq::_internal::TypeInspect::EnsureIsSummable;
+        //using Seq::_internal::TypeInspect::FallbackSumInitial;
 
-        return []<EnsureIsSummable T>(IEnumerable<T> sequence) -> auto
+        return []<_internal::TypeInspect::EnsureIsSummable T>(IEnumerable<T> sequence) -> auto
         {
-            if constexpr (EnsureIsSummable<UserOverride>)
+            if constexpr (_internal::TypeInspect::EnsureIsSummable<UserOverride>)
             {
                 static_assert(sizeof(UserOverride) >= sizeof(T),
                               "UserOverride type in Seq::sum cannot be smaller than the input's T type");
@@ -448,7 +451,7 @@ namespace Seq
             }
             else
             {
-                return _internal::sum(std::move(sequence), FallbackSumInitial<T>{});
+                return _internal::sum(std::move(sequence), _internal::TypeInspect::FallbackSumInitial<T>{});
             }
         };
     }

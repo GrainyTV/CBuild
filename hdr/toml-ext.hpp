@@ -10,12 +10,13 @@
 #include "seq/seq.hpp"
 #include "toml++/toml.hpp"
 
-#undef OPTIONAL
-
 enum class TomlLookupManner : std::uint8_t
 {
     MANDATORY,
-    OPTIONAL,
+    // The name OPTIONAL would make more sense here
+    // but compilers might have a macro defined like that
+    // causing identifier shadowing, which is really annoying
+    MAYBE_SPECIFIED,
 };
 
 namespace TomlExt

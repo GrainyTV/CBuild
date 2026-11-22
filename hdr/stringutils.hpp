@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <cstdint>
 
 namespace String
 {
@@ -7,7 +8,7 @@ namespace String
     {
         if (not str.empty())
         {
-            ssize_t i = str.length() - 1;
+            int64_t i = str.length() - 1;
 
             while ((str[i] == '\n' || str[i] == '\r') && i >= 0)
             {
