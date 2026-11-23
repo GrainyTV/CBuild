@@ -1,5 +1,6 @@
 #include "module.hpp"
 
+#include <set>
 #include <string_view>
 #include <filesystem>
 #include <fstream>
@@ -139,6 +140,40 @@ static auto parseModuleType(std::string_view type) -> ModuleType
     Terminate::invalidModuleType(type);
 }
 
+static auto parseLibraryDirectories(const std::string& str) -> std::string
+{
+    // TODO: possibly optimizable function
+    // need to introduce Seq::item, Seq::tryHead and Seq::find to make this better
+    // ---
+    const auto shit =
+        String::split(str, '\n')
+        | Seq::filter([](const auto& line) { return line.starts_with("libraries:"); })
+        | Seq::map([](const auto& line) {
+                const auto keyValue     = String::split(line, '=') | Seq::toVector();
+                const std::string paths = keyValue.at(1);
+
+                return
+                    String::split(paths, Platform::multiplePathsSeparator())
+                    | Seq::toVector();
+            })
+        | Seq::toVector();
+
+    std::set<fs::path> paths;
+
+    for (const auto& pathStr : shit.at(0))
+    {
+        fs::path path{pathStr};
+
+        if (fs::is_directory(path) && not paths.contains(fs::canonical(path)))
+        {
+            paths.emplace(fs::canonical(path));
+        }
+    }
+
+    return
+        flattenStringEnumerable(paths | Seq::map([](const fs::path& p) { return fmt::format("-L{:s}", p); }));
+}
+
 auto BuildModule::linkStaticLibrary() const -> void
 {
     const std::string objectFilesFlattened =
@@ -162,7 +197,7 @@ auto BuildModule::linkStaticExecutable() const -> void
 
     Process::Input link;
 
-    if (String::contains(context.compiler, "cl.exe"))
+    if ((context.compilerInfo & MSVC_IN_USE) != 0)
     {
         link = Process::create(
             context.linker,
@@ -170,25 +205,26 @@ auto BuildModule::linkStaticExecutable() const -> void
             objectFilesFlattened
         );
     }
-    else if (String::contains(context.compiler, "mingw"))
+    else if ((context.compilerInfo & MINGW_IN_USE) != 0)
     {
-        Process::Result cmdCrt2 = Process::run(Process::create(context.compiler, "--print-file-name", "crt2.o"));
-        Process::Result cmdCrtb = Process::run(Process::create(context.compiler, "--print-file-name", "crtbegin.o"));
-        Process::Result cmdCrte = Process::run(Process::create(context.compiler, "--print-file-name", "crtend.o"));
+        Process::Result searchDirs = Process::run(Process::create(context.compiler, "--print-search-dirs"));
+        const std::string libPaths = parseLibraryDirectories(searchDirs.output);
 
-        fs::path baseLibDir = fs::path{cmdCrt2.output}.parent_path();
-        fs::path gccLibDir  = fs::path{cmdCrtb.output}.parent_path();
+        Process::Result crt2PathStr   = Process::run(Process::create(context.compiler, "--print-file-name", "crt2.o"));
+        Process::Result crtBegPathStr = Process::run(Process::create(context.compiler, "--print-file-name", "crtbegin.o"));
+        Process::Result crtEndPathStr = Process::run(Process::create(context.compiler, "--print-file-name", "crtend.o"));
+
+        fs::path crt2   = fs::canonical(crt2PathStr.output);
+        fs::path crtBeg = fs::canonical(crtBegPathStr.output);
+        fs::path crtEnd = fs::canonical(crtEndPathStr.output);
 
         link = Process::create(
             context.linker,
             "-static",
-            "-o", context.buildDir / output,
-            "-L", baseLibDir,
-            "-L", gccLibDir,
+            "-o", fmt::format("{:s}", context.buildDir / output),
+            libPaths,
             objectFilesFlattened,
-            cmdCrt2.output,
-            cmdCrtb.output,
-            cmdCrte.output,
+            crt2, crtBeg, crtEnd,
             "-lstdc++",
             "--start-group", "-lgcc", "-lgcc_eh", "--end-group",
             "-lmingw32",
@@ -229,7 +265,7 @@ auto BuildModule::linkStaticExecutable() const -> void
         );
     }
 
-    // fmt::println("{:s}", link);
+    fmt::println("{:s}", link);
 
     Process::Result cmd = Process::run(link);
 
@@ -262,12 +298,12 @@ auto BuildModule::build() const -> void
         flattenStringEnumerable(headers | Seq::map([](const fs::path& hdr) { return "\"-I" + hdr.string() + "\""; }));
 
     const std::string compileFlag =
-        context.compiler == "cl.exe"
+        (context.compilerInfo & MSVC_IN_USE) != 0
         ? "/c"
         : "-c";
 
     const std::string outputFlag =
-        context.compiler == "cl.exe"
+        (context.compilerInfo & MSVC_IN_USE) != 0
         ? "/Fo:"
         : "-o";
 
@@ -286,16 +322,17 @@ auto BuildModule::build() const -> void
             fmt::format("{:s}", src)
         );
 
-        fmt::println("[{:d}/{:d}] {:s}", finished, total, compile);
+        fmt::print("[{:d}/{:d}] {:s}\r", finished, total, compile);
 
         Process::Result cmd = Process::run(compile);
+        finished += 1;
 
         if (cmd.exitcode != 0)
         {
             Terminate::failedProcess(cmd);
         }
 
-        finished += 1;
+        fmt::println("[{:d}/{:d}] {:s}", finished, total, compile);
     }
 
     // TODO: check whether we actually need linking with stdc++

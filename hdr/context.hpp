@@ -21,6 +21,13 @@ struct BuildContext
     std::filesystem::path buildDir;
 
     Language language;
+
+    uint8_t compilerInfo = 0;
 };
 
+constexpr uint8_t MSVC_IN_USE  = 0b00000001;
+constexpr uint8_t MINGW_IN_USE = 0b00000010;
+
 auto buildContextFrom(const toml::table& globalScope, const std::filesystem::path& sourceDir) -> BuildContext;
+
+auto deduceCompilerInfo(BuildContext& context) -> void;

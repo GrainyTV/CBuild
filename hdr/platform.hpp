@@ -75,4 +75,13 @@ namespace Platform
         return ".o";
     #endif
     }
+
+    consteval auto multiplePathsSeparator() -> char
+    {
+    #if PLATFORM_WINDOWS
+        return ';';
+    #else
+        return ':';
+    #endif
+    }
 }

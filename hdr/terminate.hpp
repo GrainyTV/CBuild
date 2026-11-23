@@ -89,6 +89,7 @@ namespace Terminate
         _internal::exitFailure(message, when);
     }
 
+#if PLATFORM_LINUX
     [[noreturn]]
     inline auto posixError(std::string_view fn)
     {
@@ -101,6 +102,9 @@ namespace Terminate
         );
     }
 
+#endif
+
+#if PLATFORM_WINDOWS
     [[noreturn]]
     inline auto winapiError(std::string_view fn)
     {
@@ -141,4 +145,6 @@ namespace Terminate
             TerminateConditionWhen::AT_BUILD
         );
     }
+
+#endif
 }

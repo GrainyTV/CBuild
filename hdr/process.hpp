@@ -89,5 +89,5 @@ namespace Process
         return input;
     }
 
-    auto run(const Process::Input& input) -> Process::Result;
+    auto run(const Process::Input& input, bool isNonZeroExitcodeFailure = true) -> Process::Result;
 }

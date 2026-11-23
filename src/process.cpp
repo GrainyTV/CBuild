@@ -115,7 +115,7 @@ auto Process::Pipe::readChunkOfData(std::string& to, char buffer[], std::size_t 
 #endif
 }
 
-auto Process::run(const Process::Input& input) -> Process::Result
+auto Process::run(const Process::Input& input, bool isNonZeroExitcodeFailure) -> Process::Result
 {
     Pipe opipe;
     Pipe epipe;
@@ -182,7 +182,7 @@ auto Process::run(const Process::Input& input) -> Process::Result
 
     char buffer[4096];
     DWORD readAmount  = 0;
-    DWORD exitcode    = 0;
+    DWORD exitcodeD   = 0;
     bool pipeFinished = false;
 
     while (not pipeFinished)
@@ -239,7 +239,7 @@ auto Process::run(const Process::Input& input) -> Process::Result
         Terminate::winapiError(nameof(WaitForSingleObject));
     }
 
-    if (not GetExitCodeProcess(pi.hProcess, &exitcode))
+    if (not GetExitCodeProcess(pi.hProcess, &exitcodeD))
     {
         Terminate::winapiError(nameof(GetExitCodeProcess));
     }
@@ -247,11 +247,7 @@ auto Process::run(const Process::Input& input) -> Process::Result
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
 
-    return {
-        .output   = String::rstrip(std::move(out)),
-        .error    = String::rstrip(std::move(err)),
-        .exitcode = static_cast<int>(exitcode),
-    };
+    const int exitcode = static_cast<int>(exitcodeD);
 
 #else
     int childPid = fork();
@@ -349,13 +345,21 @@ auto Process::run(const Process::Input& input) -> Process::Result
         Terminate::posixError(nameof(waitpid));
     }
 
-    const bool exited = WIFEXITED(status);
-
-    return {
-        .output   = String::rstrip(std::move(out)),
-        .error    = String::rstrip(std::move(err)),
-        .exitcode = exited ? WEXITSTATUS(status) : 1,
-    };
+    const bool exited  = WIFEXITED(status);
+    const int exitcode = exited ? WEXITSTATUS(status) : 1;
 
 #endif
+
+    Process::Result result{
+        .output   = String::rstrip(std::move(out)),
+        .error    = String::rstrip(std::move(err)),
+        .exitcode = exitcode,
+    };
+
+    if (exitcode != 0 && isNonZeroExitcodeFailure)
+    {
+        Terminate::failedProcess(result);
+    }
+
+    return result;
 }
